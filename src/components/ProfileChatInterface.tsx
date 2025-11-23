@@ -122,6 +122,13 @@ export function ProfileChatInterface({ profile, profileReadme, repoReadmes }: Pr
             setMessages((prev) => [...prev, modelMsg]);
         } catch (error) {
             console.error(error);
+            // Show user-friendly error message
+            const errorMsg: Message = {
+                id: (Date.now() + 1).toString(),
+                role: "model",
+                content: "I encountered an error while analyzing the profile. Please try again or rephrase your question.",
+            };
+            setMessages((prev) => [...prev, errorMsg]);
         } finally {
             setLoading(false);
         }

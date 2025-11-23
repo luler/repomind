@@ -57,8 +57,6 @@ export async function processChatQuery(
     const filePaths = repoContext.filePaths;
     const relevantFiles = await analyzeFileSelection(query, filePaths);
 
-    console.log("Selected files:", relevantFiles);
-
     // 2. Retrieval: Fetch content of relevant files
     let context = "";
     for (const file of relevantFiles) {

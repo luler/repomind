@@ -123,7 +123,13 @@ export function ChatInterface({ repoContext, onToggleSidebar }: ChatInterfacePro
             setMessages((prev) => [...prev, modelMsg]);
         } catch (error) {
             console.error(error);
-            // Handle error
+            // Show user-friendly error message
+            const errorMsg: Message = {
+                id: (Date.now() + 1).toString(),
+                role: "model",
+                content: "I encountered an error while analyzing the code. Please try again or rephrase your question.",
+            };
+            setMessages((prev) => [...prev, errorMsg]);
         } finally {
             setLoading(false);
         }

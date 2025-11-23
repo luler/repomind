@@ -1,6 +1,8 @@
 # RepoMind
 
-**RepoMind** is an intelligent coding assistant that allows you to "chat" with any public GitHub repository. It uses Agentic RAG (Retrieval-Augmented Generation) to perform deep code analysis without needing to clone the entire codebase.
+![RepoMind Banner](/repomind.png)
+
+**[RepoMind](https://repomind-ai.vercel.app)** is an intelligent coding assistant that allows you to "chat" with any public GitHub repository. It uses Agentic RAG (Retrieval-Augmented Generation) to perform deep code analysis without needing to clone the entire codebase.
 
 ## Features
 
@@ -40,8 +42,8 @@
 
 ## Tech Stack
 
-*   **Framework**: Next.js 14 (App Router)
-*   **AI**: Google Gemini 1.5 Flash
-*   **Styling**: Tailwind CSS
+*   **Framework**: Next.js 16 (App Router)
+*   **AI**: Google Gemini 2.0 Flash (Experimental)
+*   **Styling**: Tailwind CSS 4
 *   **Animations**: Framer Motion
 *   **Icons**: Lucide React
