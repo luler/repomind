@@ -1,6 +1,6 @@
 # RepoMind
 
-![RepoMind Banner](/repomind.png)
+![RepoMind Banner](/public/repomind.png)
 
 **[RepoMind](https://repomind-ai.vercel.app)** is an intelligent coding assistant that allows you to "chat" with any public GitHub repository. It uses Agentic RAG (Retrieval-Augmented Generation) to perform deep code analysis without needing to clone the entire codebase.
 
