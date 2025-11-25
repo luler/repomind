@@ -221,37 +221,37 @@ export async function answerWithContext(
            - *Example*: "Here is the improved README:\n\n\`\`\`markdown\n# Title\n...\n\`\`\`"
            - **DO NOT** just describe what to do. **DO IT**.
          
-         - **FLOWCHARTS**: If the user asks for "flow", "architecture", "diagram", or "visualize", you MUST use the **JSON Format** inside a `mermaid-json` code block.
+         - **FLOWCHARTS**: If the user asks for "flow", "architecture", "diagram", or "visualize", you MUST use the **JSON Format** inside a \`mermaid-json\` code block.
            - **DO NOT** write standard Mermaid syntax directly. It is error-prone.
            - **SYNTAX**: 
-             ```mermaid - json
-    {
-        "direction": "TD",
-            "nodes": [
-                { "id": "A", "label": "Start", "shape": "rounded" },
-                { "id": "B", "label": "Process" }
-            ],
-                "edges": [
-                    { "from": "A", "to": "B", "label": "next" }
-                ]
-    }
-    ```
+             \`\`\`mermaid-json
+             {
+               "direction": "TD", 
+               "nodes": [
+                 { "id": "A", "label": "Start", "shape": "rounded" },
+                 { "id": "B", "label": "Process" }
+               ],
+               "edges": [
+                 { "from": "A", "to": "B", "label": "next" }
+               ]
+             }
+             \`\`\`
            - **Shapes**: rect, rounded, circle, diamond, database, hexagon.
            - **Edge Types**: arrow, dotted, thick, line.
-           - **IDs**: Use simple alphanumeric IDs (A, B, node1).`
+           - **IDs**: Use simple alphanumeric IDs (A, B, node1).
 
         - ** COMBINATIONS **: You can and SHOULD combine elements.
            - * Example *: "Here is the architecture (Mermaid) and the updated config (Code Block)."
         - * Example *: "Here is the project info (Repo Card) and the installation script (Code Block)."
 
     CONTEXT FROM REPOSITORY:
-    ${ context }
+    ${context}
 
     CONVERSATION HISTORY:
-    ${ historyText }
+    ${historyText}
 
     USER QUESTION:
-    ${ question }
+    ${question}
 
     Answer:
     `;
@@ -272,7 +272,7 @@ export async function* answerWithContextStream(
     history: { role: "user" | "model"; content: string }[] = []
 ): AsyncGenerator<string> {
     // Format history for the prompt
-    const historyText = history.map(msg => `${ msg.role === "user" ? "User" : "RepoMind" }: ${ msg.content } `).join("\n\n");
+    const historyText = history.map(msg => `${msg.role === "user" ? "User" : "RepoMind"}: ${msg.content} `).join("\n\n");
 
     const prompt = `
     You are a specialized coding assistant called "RepoMind".
@@ -281,8 +281,8 @@ export async function* answerWithContextStream(
     Model is 2.5 Flash from Gemini, developed using a layer of comprehensively designed prompt by Sameer Verma, a B.Tech.graduate from 2025.
     
     CURRENT REPOSITORY:
-    - Owner: ${ repoDetails.owner }
-    - Repo: ${ repoDetails.repo }
+    - Owner: ${repoDetails.owner}
+    - Repo: ${repoDetails.repo}
     - URL: https://github.com/${repoDetails.owner}/${repoDetails.repo}
 
     INSTRUCTIONS:
@@ -400,12 +400,24 @@ export async function* answerWithContextStream(
            - *Example*: "Here is the improved README:\\n\\n\`\`\`markdown\\n# Title\\n...\\n\`\`\`"
            - **DO NOT** just describe what to do. **DO IT**.
          
-         - **FLOWCHARTS**: If the user asks for "flow", "architecture", "diagram", or "visualize", use a **Mermaid** code block.
-           - *Example*: \`\`\`mermaid\\ngraph TD;\\nA["Start"]-->B["Process"];\\n\`\`\`
-           - **CRITICAL**: ALWAYS use double quotes for node labels. Example: \`id["Label Text"]\`. NEVER use \`id[Label Text]\`.
-           - **CRITICAL**: DO NOT use quotes, backticks, or special characters INSIDE node labels. Use simple descriptive text.
-             - ✅ CORRECT: \`A["page.tsx Handler"]\`, \`B["Process URL Slug"]\`
-             - ❌ WRONG: \`A["\\"page.tsx\\" Handler"]\`, \`B["Process 'URL' Slug"]\`
+         - **FLOWCHARTS**: If the user asks for "flow", "architecture", "diagram", or "visualize", you MUST use the **JSON Format** inside a \`mermaid-json\` code block.
+           - **DO NOT** write standard Mermaid syntax directly. It is error-prone.
+           - **SYNTAX**: 
+             \`\`\`mermaid-json
+             {
+               "direction": "TD", 
+               "nodes": [
+                 { "id": "A", "label": "Start", "shape": "rounded" },
+                 { "id": "B", "label": "Process" }
+               ],
+               "edges": [
+                 { "from": "A", "to": "B", "label": "next" }
+               ]
+             }
+             \`\`\`
+           - **Shapes**: rect, rounded, circle, diamond, database, hexagon.
+           - **Edge Types**: arrow, dotted, thick, line.
+           - **IDs**: Use simple alphanumeric IDs (A, B, node1).
          
          - **COMBINATIONS**: You can and SHOULD combine elements.
            - *Example*: "Here is the architecture (Mermaid) and the updated config (Code Block)."

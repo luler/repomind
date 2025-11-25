@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { GitHubProfile } from "@/lib/github";
 import { EnhancedMarkdown } from "./EnhancedMarkdown";
 import { countMessageTokens, formatTokenCount, getTokenWarningLevel, isRateLimitError, getRateLimitErrorMessage } from "@/lib/tokens";
-import { validateMermaidSyntax, sanitizeMermaidCode, getFallbackTemplate } from "@/lib/diagram-utils";
+import { validateMermaidSyntax, sanitizeMermaidCode, getFallbackTemplate, generateMermaidFromJSON } from "@/lib/diagram-utils";
 import { saveProfileConversation, loadProfileConversation } from "@/lib/storage";
 import Link from "next/link";
 import mermaid from "mermaid";
@@ -49,9 +49,26 @@ const MessageContent = ({ content, messageId }: { content: string, messageId: st
         code: ({ className, children, ...props }: any) => {
             const match = /language-(\w+)/.exec(className || "");
             const isMermaid = match && match[1] === "mermaid";
+            const isMermaidJson = match && match[1] === "mermaid-json";
 
             if (isMermaid) {
                 return <Mermaid key={messageId} chart={String(children).replace(/\n$/, "")} />;
+            }
+
+            if (isMermaidJson) {
+                try {
+                    const jsonContent = String(children).replace(/\n$/, "");
+                    const data = JSON.parse(jsonContent);
+                    const chart = generateMermaidFromJSON(data);
+                    return <Mermaid key={messageId} chart={chart} />;
+                } catch (e) {
+                    return (
+                        <div className="flex items-center gap-2 p-4 bg-zinc-900/50 rounded-lg border border-white/10">
+                            <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                            <span className="text-zinc-400 text-sm">Generating diagram...</span>
+                        </div>
+                    );
+                }
             }
 
             return match ? (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import mermaid from "mermaid";
-import { validateMermaidSyntax, sanitizeMermaidCode, getFallbackTemplate } from "@/lib/diagram-utils";
-import { Download, X, Maximize2, ZoomIn } from "lucide-react";
+import { validateMermaidSyntax, sanitizeMermaidCode, getFallbackTemplate, generateMermaidFromJSON } from "@/lib/diagram-utils";
+import { Download, X, Maximize2, ZoomIn, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas-pro";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,9 +48,25 @@ export const Mermaid = ({ chart }: { chart: string }) => {
 
         const renderDiagram = async () => {
             try {
+                let codeToRender = chart;
+
+                // Check if the content is JSON (starts with {)
+                // This handles cases where the LLM uses ```mermaid for JSON content
+                if (chart.trim().startsWith('{')) {
+                    try {
+                        console.log('🔍 Detected JSON content in Mermaid block, converting...');
+                        const data = JSON.parse(chart);
+                        codeToRender = generateMermaidFromJSON(data);
+                        console.log('✅ Converted JSON to Mermaid:', codeToRender);
+                    } catch (e) {
+                        console.warn('⚠️ Failed to parse JSON in Mermaid block:', e);
+                        // Continue with original content if parsing fails
+                    }
+                }
+
                 // Layer 1: Basic sanitization (fast, catches obvious issues)
                 console.log('🔄 Attempting Layer 1: Basic sanitization...');
-                const sanitized = sanitizeMermaidCode(chart);
+                const sanitized = sanitizeMermaidCode(codeToRender);
                 const validation = validateMermaidSyntax(sanitized);
 
                 if (!validation.valid) {
@@ -68,43 +84,10 @@ export const Mermaid = ({ chart }: { chart: string }) => {
                     return; // Success!
                 } catch (renderError: any) {
                     console.warn('❌ Layer 1 failed:', renderError.message || 'Render error');
-                    console.log('🔄 Attempting Layer 2: AI-powered fix...');
-                }
-
-                // Layer 2: AI-powered syntax fix (intelligent correction)
-                try {
-                    const response = await fetch('/api/fix-mermaid', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: sanitized })
-                    });
-
-                    if (response.ok) {
-                        const { fixed } = await response.json();
-                        if (fixed && mounted) {
-                            const { svg } = await mermaid.render(id + '-fixed', fixed);
-                            setSvg(svg);
-                            setError(null);
-                            console.log('✅ Layer 2 successful: AI fix worked');
-                            return; // Success!
-                        }
-                    } else {
-                        console.warn('❌ Layer 2 failed: API response not ok');
+                    if (mounted) {
+                        setError(renderError.message || 'Syntax error in diagram');
                     }
-                } catch (aiError: any) {
-                    console.warn('❌ Layer 2 failed:', aiError.message || 'AI fix error');
                 }
-
-                // Layer 3: Fallback template (guaranteed to work)
-                console.log('🔄 Attempting Layer 3: Fallback template...');
-                if (mounted) {
-                    const fallback = getFallbackTemplate(chart);
-                    const { svg } = await mermaid.render(id + '-fallback', fallback);
-                    setSvg(svg);
-                    setError(null);
-                    console.log('✅ Layer 3 successful: Using fallback template');
-                }
-
             } catch (error: any) {
                 console.error('Complete render failure:', error);
                 if (mounted) {
@@ -119,6 +102,37 @@ export const Mermaid = ({ chart }: { chart: string }) => {
             mounted = false;
         };
     }, [chart, id]);
+
+    const handleRetry = async () => {
+        if (!chart) return;
+        setError(null);
+
+        try {
+            // Layer 2: AI-powered syntax fix (intelligent correction)
+            console.log('🔄 Attempting Layer 2: AI-powered fix...');
+            const sanitized = sanitizeMermaidCode(chart);
+
+            const response = await fetch('/api/fix-mermaid', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: sanitized })
+            });
+
+            if (response.ok) {
+                const { fixed } = await response.json();
+                if (fixed) {
+                    const { svg } = await mermaid.render(id + '-fixed', fixed);
+                    setSvg(svg);
+                    setError(null);
+                    console.log('✅ Layer 2 successful: AI fix worked');
+                    return;
+                }
+            }
+            setError("Could not automatically fix the diagram. Please try asking again.");
+        } catch (e: any) {
+            setError(e.message || "Failed to fix diagram");
+        }
+    };
 
     const exportToPNG = async (e?: React.MouseEvent) => {
         e?.stopPropagation(); // Prevent modal opening if clicking export button
@@ -173,7 +187,21 @@ export const Mermaid = ({ chart }: { chart: string }) => {
                     </button>
                 </div>
 
-                {error && <div className="text-red-500 text-xs p-2">{error}</div>}
+                {error && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90 backdrop-blur-sm rounded-lg p-4 text-center">
+                        <p className="text-red-400 text-sm mb-3 max-w-[90%] break-words">{error}</p>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleRetry();
+                            }}
+                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-sm transition-colors flex items-center gap-2"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            Fix Diagram
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Fullscreen Modal */}
@@ -218,10 +246,10 @@ export const Mermaid = ({ chart }: { chart: string }) => {
                             </div>
 
                             {/* Content */}
-                            <div className="flex-1 overflow-auto p-8 bg-zinc-950/50 flex items-center justify-center">
+                            <div className="flex-1 overflow-hidden p-4 bg-zinc-950/50 flex items-center justify-center relative">
                                 <div
                                     ref={modalRef}
-                                    className="min-w-min"
+                                    className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full"
                                     dangerouslySetInnerHTML={{ __html: svg }}
                                 />
                             </div>

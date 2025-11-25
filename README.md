@@ -315,8 +315,18 @@ Automatically excludes:
    
    Edit `.env.local` and add your keys:
    ```env
-   GITHUB_TOKEN=your_github_pat_here
-   GEMINI_API_KEY=your_gemini_key_here
+    # GitHub Token
+    GITHUB_TOKEN="your_github_token"
+
+    # Gemini API Key
+    GEMINI_API_KEY="your_gemini_api_key"
+
+    #Caching Vercel KV
+    KV_REST_API_READ_ONLY_TOKEN="your_kv_rest_api_read_only_token"
+    KV_REST_API_TOKEN="your_kv_rest_api_token"
+    KV_REST_API_URL="your_kv_rest_api_url"
+    KV_URL="your_kv_url"
+    REDIS_URL="your_redis_url"
    ```
 
 4. **Run the development server**

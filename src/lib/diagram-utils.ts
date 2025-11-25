@@ -345,21 +345,27 @@ export function generateMermaidFromJSON(data: MermaidDiagramData): string {
 
     // Helper to sanitize label text (keep it minimal, we will quote it)
     const cleanLabel = (text: string) => {
-        return text.replace(/["\n\r]/g, ' ').trim();
+        return text ? text.replace(/["\n\r]/g, ' ').trim() : '';
+    };
+
+    // Helper to sanitize IDs (must be alphanumeric, no spaces)
+    const cleanId = (id: string) => {
+        return id.replace(/[^a-zA-Z0-9]/g, '_');
     };
 
     // Helper to get shape syntax
     const getShape = (id: string, label: string, shape?: string) => {
-        const clean = cleanLabel(label);
+        const safeId = cleanId(id);
+        const clean = cleanLabel(label || safeId); // Fallback to ID if label missing
         switch (shape) {
-            case 'rounded': return `${id}("${clean}")`;
-            case 'circle': return `${id}(("${clean}"))`;
-            case 'diamond': return `${id}{"${clean}"}`;
-            case 'database': return `${id}[("${clean}")]`;
-            case 'cloud': return `${id}(("${clean}"))`; // Mermaid cloud is ))...(( but tricky, using circle for now or specific shape if supported
-            case 'hexagon': return `${id}{{"${clean}"}}`;
+            case 'rounded': return `${safeId}("${clean}")`;
+            case 'circle': return `${safeId}(("${clean}"))`;
+            case 'diamond': return `${safeId}{"${clean}"}`;
+            case 'database': return `${safeId}[("${clean}")]`;
+            case 'cloud': return `${safeId}(("${clean}"))`;
+            case 'hexagon': return `${safeId}{{"${clean}"}}`;
             case 'rect':
-            default: return `${id}["${clean}"]`;
+            default: return `${safeId}["${clean}"]`;
         }
     };
 
@@ -380,7 +386,7 @@ export function generateMermaidFromJSON(data: MermaidDiagramData): string {
     const lines = [
         `graph ${direction}`,
         ...nodes.map(n => `  ${getShape(n.id, n.label, n.shape)}`),
-        ...edges.map(e => `  ${e.from} ${getEdge(e.type, e.label)} ${e.to}`)
+        ...edges.map(e => `  ${cleanId(e.from)} ${getEdge(e.type, e.label)} ${cleanId(e.to)}`)
     ];
 
     return lines.join('\n');

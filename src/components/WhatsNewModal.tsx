@@ -22,7 +22,7 @@ export function WhatsNewModal({ isOpen, onClose }: WhatsNewModalProps) {
                 "Implemented the devtools",
                 "Added realtime next js server response",
                 "Introduced the Vercel KV caching for GitHub API calls",
-                "Three-layer progressive pipeline for Mermaid diagrams"
+                "Robust mermaid diagram fix pipeline using JSON by LLM to mermaid by typescript."
             ]
         },
         {
