@@ -107,18 +107,26 @@ ${f.content.slice(0, 3000)} ${f.content.length > 3000 ? '... (truncated)' : ''}
     `).join('\n');
 
         const prompt = `
-You are a security expert analyzing code for vulnerabilities. Analyze these files and use the provided functions to report any security issues you find.
+You are a security expert analyzing code for CRITICAL vulnerabilities ONLY.
 
 ${filesContext}
 
-Focus on finding:
-1. **SQL Injection**: Unsanitized user input in SQL queries
-2. **XSS (Cross-Site Scripting)**: Unsafe HTML rendering, innerHTML usage
-3. **Authentication/Authorization flaws**: Missing auth checks, weak session management
-4. **Injection vulnerabilities**: Command injection, path traversal, code injection
-5. **Cryptography issues**: Weak algorithms (MD5, SHA1), hardcoded keys, insecure random
+CRITICAL RULES TO PREVENT FALSE POSITIVES:
+1. **RegExp.exec() is NOT child_process.exec()** - Never flag regex operations as command injection
+2. **String concatenation for display is NOT SQL injection** - Only flag if:
+   - User input (req., params., query., body.) flows DIRECTLY into SQL
+   - Database library is imported (mysql, postgres, sequelize, typeorm, etc.)
+3. **Verify actual vulnerability path** - Input must flow to a dangerous sink
+4. **Check for imports** - Don't flag child_process.exec if child_process isn't imported
+5. **No false positives** - When in doubt, DO NOT report
 
-Only report HIGH-CONFIDENCE vulnerabilities. Be conservative - false alarms erode trust.
+Only use reporting functions for TRUE vulnerabilities where:
+- User-controlled input exists (req.*, params.*, query.*, body.*)
+- Input flows to a dangerous operation (SQL, exec, innerHTML, etc.)
+- No sanitization or validation is present
+- The dangerous module/library is actually imported
+
+Be extremely conservative. False alarms erode trust.
 `;
 
         const result = await model.generateContent(prompt);
@@ -127,55 +135,95 @@ Only report HIGH-CONFIDENCE vulnerabilities. Be conservative - false alarms erod
         // Extract function calls
         const functionCalls = response.functionCalls?.() || [];
 
-        const findings: SecurityFinding[] = functionCalls.map((call: any) => {
-            const args = call.args as any;
-            let title = '';
-            let cwe = '';
-            let recommendation = '';
+        const findings: SecurityFinding[] = functionCalls
+            .map((call: any) => {
+                const args = call.args as any;
+                let title = '';
+                let cwe = '';
+                let recommendation = '';
 
-            switch (call.name) {
-                case 'report_sql_injection':
-                    title = 'SQL Injection Vulnerability';
-                    cwe = 'CWE-89';
-                    recommendation = 'Use parameterized queries or prepared statements. Never concatenate user input into SQL.';
-                    break;
-                case 'report_xss':
-                    title = 'Cross-Site Scripting (XSS)';
-                    cwe = 'CWE-79';
-                    recommendation = 'Sanitize user input and use secure DOM manipulation methods. Avoid innerHTML with user data.';
-                    break;
-                case 'report_auth_issue':
-                    title = 'Authentication/Authorization Issue';
-                    cwe = 'CWE-287';
-                    recommendation = 'Implement proper authentication checks and use established auth libraries.';
-                    break;
-                case 'report_injection':
-                    title = `${args.injection_type} Injection`;
-                    cwe = args.injection_type === 'command' ? 'CWE-78' : 'CWE-22';
-                    recommendation = 'Validate and sanitize all user input. Use safe APIs that don\'t accept shell commands.';
-                    break;
-                case 'report_crypto_issue':
-                    title = `Cryptography Issue: ${args.issue_type}`;
-                    cwe = 'CWE-327';
-                    recommendation = 'Use modern cryptographic algorithms (AES-256, SHA-256+). Never hardcode keys.';
-                    break;
-            }
+                switch (call.name) {
+                    case 'report_sql_injection':
+                        title = 'SQL Injection Vulnerability';
+                        cwe = 'CWE-89';
+                        recommendation = 'Use parameterized queries or prepared statements. Never concatenate user input into SQL.';
+                        break;
+                    case 'report_xss':
+                        title = 'Cross-Site Scripting (XSS)';
+                        cwe = 'CWE-79';
+                        recommendation = 'Sanitize user input and use secure DOM manipulation methods. Avoid innerHTML with user data.';
+                        break;
+                    case 'report_auth_issue':
+                        title = 'Authentication/Authorization Issue';
+                        cwe = 'CWE-287';
+                        recommendation = 'Implement proper authentication checks and use established auth libraries.';
+                        break;
+                    case 'report_injection':
+                        title = `${args.injection_type} Injection`;
+                        cwe = args.injection_type === 'command' ? 'CWE-78' : 'CWE-22';
+                        recommendation = 'Validate and sanitize all user input. Use safe APIs that don\'t accept shell commands.';
+                        break;
+                    case 'report_crypto_issue':
+                        title = `Cryptography Issue: ${args.issue_type}`;
+                        cwe = 'CWE-327';
+                        recommendation = 'Use modern cryptographic algorithms (AES-256, SHA-256+). Never hardcode keys.';
+                        break;
+                }
 
-            return {
-                type: 'code' as const,
-                severity: args.severity,
-                title,
-                description: args.explanation,
-                file: args.file,
-                line: args.line,
-                recommendation,
-                cwe
-            };
-        });
+                return {
+                    type: 'code' as const,
+                    severity: args.severity,
+                    title,
+                    description: args.explanation,
+                    file: args.file,
+                    line: args.line,
+                    recommendation,
+                    cwe,
+                    confidence: 'high' as const, // AI findings start with high confidence
+                };
+            })
+            .filter(finding => validateFinding(finding, files)); // Post-process validation
 
         return findings;
     } catch (error) {
         console.error('Gemini security analysis error:', error);
         return [];
     }
+}
+
+/**
+ * Validate AI findings to prevent false positives
+ */
+function validateFinding(
+    finding: SecurityFinding,
+    files: Array<{ path: string; content: string }>
+): boolean {
+    const file = files.find(f => f.path === finding.file);
+    if (!file) return false;
+
+    // Validate command injection findings
+    if (finding.title.toLowerCase().includes('command') || finding.title.toLowerCase().includes('injection')) {
+        // Reject if it's actually about RegExp.exec
+        if (/regexp.*exec/i.test(finding.description)) {
+            return false;
+        }
+        // Reject if child_process isn't imported
+        if (!/(?:require|import).*['"]child_process['"]/.test(file.content)) {
+            return false;
+        }
+    }
+
+    // Validate SQL injection findings
+    if (finding.title.toLowerCase().includes('sql')) {
+        // Reject if no database library is imported
+        if (!/(?:require|import).*(?:mysql|postgres|sqlite|sequelize|knex|typeorm|mongodb|mongoose)/i.test(file.content)) {
+            return false;
+        }
+        // Reject if it's just string concatenation for display/logging
+        if (/console\.|log\(|print\(/i.test(finding.description)) {
+            return false;
+        }
+    }
+
+    return true;
 }

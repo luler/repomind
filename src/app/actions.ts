@@ -265,18 +265,36 @@ export async function scanRepositoryVulnerabilities(
         // AI-powered analysis (more thorough, uses Gemini)
         const aiFindings = await analyzeCodeWithGemini(filesWithContent);
 
-        // Combine findings (deduplicate if needed)
-        const allFindings = [...patternFindings, ...aiFindings];
+        // Combine and deduplicate findings
+        const allFindings = deduplicateFindings([...patternFindings, ...aiFindings]);
+
+        // Filter by confidence (only show high/medium confidence)
+        const filteredFindings = allFindings.filter(f =>
+            !f.confidence || f.confidence !== 'low'
+        );
 
         // Get summary and grouped results
-        const summary = getScanSummary(allFindings);
-        const grouped = groupBySeverity(allFindings);
+        const summary = getScanSummary(filteredFindings);
+        const grouped = groupBySeverity(filteredFindings);
 
-        return { findings: allFindings, summary, grouped };
+        return { findings: filteredFindings, summary, grouped };
     } catch (error) {
         console.error('Vulnerability scanning error:', error);
         throw new Error('Failed to scan repository for vulnerabilities');
     }
+}
+
+/**
+ * Deduplicate findings based on file, line, and title
+ */
+function deduplicateFindings(findings: SecurityFinding[]): SecurityFinding[] {
+    const seen = new Set<string>();
+    return findings.filter(f => {
+        const key = `${f.file}:${f.line || 0}:${f.title}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 // --- Final Phase Actions ---

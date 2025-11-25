@@ -13,6 +13,7 @@ export interface SecurityFinding {
     recommendation: string;
     cwe?: string;
     cvss?: number;
+    confidence?: 'high' | 'medium' | 'low'; // Confidence level of the finding
 }
 
 export interface ScanSummary {
@@ -95,39 +96,56 @@ export function detectSecrets(filepath: string, content: string): SecurityFindin
 /**
  * Security patterns to check in code
  */
-const CODE_PATTERNS = [
+interface CodePattern {
+    name: string;
+    regex: RegExp;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    cwe: string;
+    recommendation: string;
+    validate?: (fileContent: string, matchedLine: string) => boolean;
+}
+
+const CODE_PATTERNS: CodePattern[] = [
     {
         name: 'Unsafe eval usage',
         regex: /\beval\s*\(/,
-        severity: 'high' as const,
+        severity: 'high',
         cwe: 'CWE-95',
         recommendation: 'Avoid using eval(). Use safer alternatives like JSON.parse() or Function constructor with proper validation.',
     },
     {
         name: 'Unsafe innerHTML usage',
         regex: /\.innerHTML\s*=/,
-        severity: 'medium' as const,
+        severity: 'medium',
         cwe: 'CWE-79',
         recommendation: 'Use textContent or sanitize user input before setting innerHTML to prevent XSS attacks.',
     },
     {
         name: 'SQL concatenation',
-        regex: /(?:SELECT|INSERT|UPDATE|DELETE)\s+.*?\+\s*(?:req\.|params\.|query\.|body\.|user\.|input\.)/i,
-        severity: 'high' as const,
+        regex: /(?:SELECT|INSERT|UPDATE|DELETE)\s+.*?\+\s*(?:req\.|params\.|query\.|body\.|user\.|input\.|this\.)/i,
+        severity: 'high',
         cwe: 'CWE-89',
         recommendation: 'Use parameterized queries or ORM to prevent SQL injection.',
+        validate: (content, line) => {
+            // Only flag if database library is imported
+            return /(?:require|import).*(?:mysql|postgres|sqlite|sequelize|knex|typeorm|mongodb|mongoose)/i.test(content);
+        }
     },
     {
         name: 'Unsafe child_process',
         regex: /(?:child_process|cp)\s*\.\s*(?:exec|spawn)\s*\(/,
-        severity: 'high' as const,
+        severity: 'high',
         cwe: 'CWE-78',
         recommendation: 'Validate and sanitize all input passed to child_process. Use execFile() instead of exec() when possible.',
+        validate: (content, line) => {
+            // Ensure child_process is actually imported
+            return /(?:require|import).*['"]child_process['"]/.test(content);
+        }
     },
     {
         name: 'Weak crypto algorithm',
         regex: /\b(md5|sha1)\b/i,
-        severity: 'medium' as const,
+        severity: 'medium',
         cwe: 'CWE-327',
         recommendation: 'Use SHA-256 or stronger hashing algorithms. MD5 and SHA-1 are cryptographically broken.',
     },
@@ -146,8 +164,19 @@ export function detectCodePatterns(filepath: string, content: string): SecurityF
     const lines = content.split('\n');
 
     lines.forEach((line, index) => {
+        // Skip comment lines
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+            return;
+        }
+
         CODE_PATTERNS.forEach(pattern => {
             if (pattern.regex.test(line)) {
+                // Run validation if provided
+                if (pattern.validate && !pattern.validate(content, line)) {
+                    return; // Skip if validation fails
+                }
+
                 findings.push({
                     type: 'code',
                     severity: pattern.severity,
@@ -157,6 +186,7 @@ export function detectCodePatterns(filepath: string, content: string): SecurityF
                     line: index + 1,
                     recommendation: pattern.recommendation,
                     cwe: pattern.cwe,
+                    confidence: pattern.validate ? 'high' : 'medium', // Higher confidence with validation
                 });
             }
         });
