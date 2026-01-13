@@ -7,16 +7,19 @@ export type ExportMessage = {
 type MermaidRenderer = (code: string, id: string) => Promise<string>;
 type MermaidJsonConverter = (json: string) => string | null;
 
+// Keep filenames predictable and safe for most filesystems.
 function sanitizeFilenameLabel(label: string): string {
     return label.replace(/[^a-z0-9._-]+/gi, "-");
 }
 
+// Timestamped export name based on the chat context.
 function buildChatExportFilename(label: string, exportedAt: Date): string {
     const safeLabel = sanitizeFilenameLabel(label);
     const stamp = exportedAt.toISOString().replace(/[:.]/g, "-");
     return `${safeLabel}-chat-export-${stamp}.md`;
 }
 
+// Trigger a download in the browser without a server round-trip.
 function downloadMarkdown(content: string, filename: string): void {
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -29,6 +32,7 @@ function downloadMarkdown(content: string, filename: string): void {
     URL.revokeObjectURL(url);
 }
 
+// End-to-end export: convert charts, build markdown, then download.
 export async function exportChatToMarkdownFile(options: {
     title: string;
     contextLabel: string;
@@ -57,6 +61,7 @@ export async function exportChatToMarkdownFile(options: {
     downloadMarkdown(content, filename);
 }
 
+// Replace mermaid code blocks with embedded SVG images for markdown portability.
 export async function convertChartsToImages(
     content: string,
     options: {
@@ -106,6 +111,7 @@ export async function convertChartsToImages(
     return result;
 }
 
+// Construct a readable, structured transcript for export.
 export function buildChatMarkdown(options: {
     title: string;
     contextLabel: string;
