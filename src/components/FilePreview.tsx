@@ -20,6 +20,13 @@ export function FilePreview({ isOpen, filePath, repoOwner, repoName, onClose }: 
     const [error, setError] = useState<string | null>(null);
     const [fileInfo, setFileInfo] = useState<{ size: number; html_url: string } | null>(null);
 
+    const decodeBase64Content = (base64: string) => {
+        const cleaned = base64.replace(/\s/g, "");
+        const binary = atob(cleaned);
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        return new TextDecoder("utf-8").decode(bytes);
+    };
+
     useEffect(() => {
         if (!isOpen || !filePath) {
             setContent("");
@@ -79,7 +86,7 @@ export function FilePreview({ isOpen, filePath, repoOwner, repoName, onClose }: 
                 }
 
                 if (data.content) {
-                    const decoded = atob(data.content);
+                    const decoded = decodeBase64Content(data.content);
                     setContent(decoded);
                 } else {
                     // If content is missing but size is small (shouldn't happen for text files < 1MB usually)
