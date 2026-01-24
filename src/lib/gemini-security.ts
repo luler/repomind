@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { SecurityFinding } from "./security-scanner";
+import { setupGeminiProxy } from "./gemini-proxy";
+
+// Initialize proxy if configured
+setupGeminiProxy();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -94,7 +98,7 @@ export async function analyzeCodeWithGemini(
 ): Promise<SecurityFinding[]> {
     try {
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
+            model: process.env.GEMINI_MODEL || 'gemini-3-flash-preview',
             tools: [{ functionDeclarations: securityAnalysisFunctions as any }]
         });
 
