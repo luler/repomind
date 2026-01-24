@@ -5,14 +5,14 @@ import { setupGeminiProxy } from "./gemini-proxy";
 setupGeminiProxy();
 
 // Helper to get a fresh model instance
-function getModel(modelName: string = "gemini-3-flash-preview") {
+function getModel(modelName?: string) {
   const apiKey = process.env.GEMINI_API_KEY || "";
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY environment variable is not set");
   }
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
-    model: modelName,
+    model: modelName || process.env.GEMINI_MODEL || "gemini-3-flash-preview",
     tools: [{ googleSearch: {} } as any],
   });
 }
