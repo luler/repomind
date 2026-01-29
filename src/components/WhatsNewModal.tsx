@@ -14,21 +14,31 @@ export function WhatsNewModal({ isOpen, onClose }: WhatsNewModalProps) {
 
     const versions = [
         {
-            version: "v1.3.3",
+            version: "v1.3.4",
             isNew: true,
             features: [
-                "📝 Markdown Support: User input contained between three backticks is now treated as markdown.",
-                "📱 PWA Support: Full Progressive Web App support is now available.",
-                "🐙 GitHub Link: GitHub repository link is now implemented on the webpage."
+                "Chat Export: Export chats to Markdown with Mermaid rendering.",
+                "Copy Response: One-click copy for AI responses with enhanced clipboard support and icon updates.",
+                "Chat UX: Reference text handling, selection support, and refined chat input/profile chat interfaces.",
+                "File Preview: Refactored base64 decoding logic for readability."
+            ]
+        },
+        {
+            version: "v1.3.3",
+            isNew: false,
+            features: [
+                "Markdown Support: User input contained between three backticks is now treated as markdown.",
+                "PWA Support: Full Progressive Web App support is now available.",
+                "GitHub Link: GitHub repository link is now implemented on the webpage."
             ]
         },
         {
             version: "v1.3.2",
             isNew: false,
             features: [
-                "⚡ Blazing Fast: Instant profile loads & faster file selection with Flash-Lite.",
-                "🌐 Web Search: Real-time answers for competitors, news, and jobs.",
-                "🔗 Smart URLs: Intelligent LinkedIn summarization & identity verification."
+                "Blazing Fast: Instant profile loads & faster file selection with Flash-Lite.",
+                "Web Search: Real-time answers for competitors, news, and jobs.",
+                "Smart URLs: Intelligent LinkedIn summarization & identity verification."
             ]
         },
         {
