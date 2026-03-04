@@ -1,11 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getGenAI, getModelName } from "./ai-client";
 import type { SecurityFinding } from "./security-scanner";
-import { setupGeminiProxy } from "./gemini-proxy";
-
-// Initialize proxy if configured
-setupGeminiProxy();
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 /**
  * Gemini function declarations for security analysis
@@ -97,8 +91,8 @@ export async function analyzeCodeWithGemini(
     files: Array<{ path: string; content: string }>
 ): Promise<SecurityFinding[]> {
     try {
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || 'gemini-3-flash-preview',
+        const model = getGenAI().getGenerativeModel({
+            model: getModelName(),
             tools: [{ functionDeclarations: securityAnalysisFunctions as any }]
         });
 
@@ -198,6 +192,75 @@ Be extremely conservative. False alarms erode trust.
         });
         // Return empty array instead of throwing to allow graceful degradation
         return [];
+    }
+}
+
+
+export async function generateSecurityPatch(params: {
+    filePath: string;
+    fileContent: string;
+    line?: number;
+    description: string;
+    recommendation: string;
+    snippet?: string;
+}): Promise<{ patch: string; explanation: string }> {
+    try {
+        const model = getGenAI().getGenerativeModel({
+            model: getModelName()
+        });
+
+        const contextSnippet = params.snippet || '';
+        const lineInfo = params.line ? `Line: ${params.line}` : 'Line: unknown';
+
+        const prompt = `
+You are a security engineer. Generate a minimal, safe fix for the vulnerability.
+
+File: ${params.filePath}
+${lineInfo}
+
+Issue:
+${params.description}
+
+Recommendation:
+${params.recommendation}
+
+Context snippet:
+\`\`\`
+${contextSnippet}
+\`\`\`
+
+Full file (may be truncated):
+\`\`\`
+${params.fileContent.slice(0, 8000)}
+${params.fileContent.length > 8000 ? '\n... (truncated)' : ''}
+\`\`\`
+
+Return ONLY valid JSON with keys:
+- "patch": a unified diff with --- a/${params.filePath} and +++ b/${params.filePath}
+- "explanation": a short explanation of the fix
+
+Do not include markdown fences.`;
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        const jsonPayload = (start !== -1 && end > start) ? text.slice(start, end + 1) : null;
+        if (!jsonPayload) {
+            return { patch: text.trim(), explanation: 'Model response did not include JSON.' };
+        }
+
+        const parsed = JSON.parse(jsonPayload);
+        return {
+            patch: String(parsed.patch || '').trim(),
+            explanation: String(parsed.explanation || '').trim()
+        };
+    } catch (error: any) {
+        console.error('Gemini patch generation error:', error);
+        return {
+            patch: '',
+            explanation: 'Failed to generate patch.'
+        };
     }
 }
 

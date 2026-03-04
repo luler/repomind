@@ -7,12 +7,20 @@ import { Loader2, AlertCircle, ArrowLeft, Github, Search } from "lucide-react";
 import { GitHubRepo } from "@/lib/github";
 import Link from "next/link";
 
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    alternates: {
+        canonical: '/chat',
+    }
+};
+
 export default async function ChatPage({
     searchParams,
 }: {
-    searchParams: Promise<{ q?: string }>;
+    searchParams: Promise<{ q?: string; prompt?: string }>;
 }) {
-    const { q: query } = await searchParams;
+    const { q: query, prompt } = await searchParams;
 
     if (!query) {
         return (
@@ -34,5 +42,5 @@ export default async function ChatPage({
     }
 
     // For repos, use RepoLoader for client-side loading
-    return <RepoLoader query={query} />;
+    return <RepoLoader query={query} initialPrompt={prompt} />;
 }

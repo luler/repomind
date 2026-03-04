@@ -8,7 +8,10 @@ import {
   getCachedProfileData,
   cacheFileTree,
   getCachedFileTree,
+  cacheRepoFullContext,
+  getCachedRepoFullContext,
 } from "./cache";
+import { unstable_cache } from 'next/cache';
 
 // Validate GitHub token
 const githubToken = process.env.GITHUB_TOKEN;
@@ -19,6 +22,10 @@ if (!githubToken) {
 const octokit = new Octokit({
   auth: githubToken,
   request: {
+    // NOTE: cache:"no-store" disables HTTP caching for all GitHub API calls.
+    // This is intentional — it prevents stale data in edge/serverless deployments
+    // where the module reloads frequently. Caching is handled at the application
+    // layer via KV (see cache.ts) using SHA-based keys for automatic invalidation.
     fetch: (url: string, options: any) => {
       return fetch(url, {
         ...options,
@@ -29,7 +36,11 @@ const octokit = new Octokit({
   },
 });
 
-// In-memory cache for the session
+// In-memory caches for the current process lifetime.
+// NOTE: In Vercel serverless functions these Maps are effectively useless as a
+// persistent cache — each cold start initializes fresh Maps. They provide a
+// minor speedup within a single warm invocation (e.g., sequential calls in one
+// request). The real caching layer is Vercel KV (see cache.ts).
 const profileCache = new Map<string, GitHubProfile>();
 const repoCache = new Map<string, GitHubRepo>();
 
@@ -39,6 +50,8 @@ export interface GitHubProfile {
   html_url: string;
   name: string | null;
   bio: string | null;
+  location: string | null;
+  blog: string | null;
   public_repos: number;
   followers: number;
   following: number;
@@ -63,14 +76,60 @@ export interface GitHubRepo {
 
 export interface FileNode {
   path: string;
-  mode: string;
+  mode?: string;
   type: "blob" | "tree";
   sha: string;
   size?: number;
-  url: string;
+  url?: string;
 }
 
-export async function getProfile(username: string): Promise<GitHubProfile> {
+/**
+ * GraphQL query for enhanced repository details (languages, recent commits).
+ * Defined at module level rather than inside the calling function
+ * to keep constants and queries out of the function body.
+ */
+const REPO_DETAILS_QUERY = `
+  query RepoDetails($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+        totalSize
+        edges {
+          size
+          node {
+            name
+            color
+          }
+        }
+      }
+      defaultBranchRef {
+        target {
+          ... on Commit {
+            history(first: 20) {
+              edges {
+                node {
+                  message
+                  committedDate
+                  author {
+                    name
+                    avatarUrl
+                    user {
+                      login
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Core Profile Fetcher (hit by unstable_cache)
+ */
+async function getProfileRaw(username: string): Promise<GitHubProfile> {
   // Check memory cache first
   if (profileCache.has(username)) {
     return profileCache.get(username)!;
@@ -94,6 +153,18 @@ export async function getProfile(username: string): Promise<GitHubProfile> {
 
   return data;
 }
+
+/**
+ * EDGE-CACHE: Get Profile with Edge Performance
+ */
+export const getProfile = unstable_cache(
+  async (username: string) => getProfileRaw(username),
+  ['github-profile'],
+  {
+    revalidate: 1800, // 30 minutes
+    tags: ['profile']
+  }
+);
 
 export async function getRepo(owner: string, repo: string): Promise<GitHubRepo> {
   const cacheKey = `${owner}/${repo}`;
@@ -186,52 +257,20 @@ export async function getRepoFileTree(owner: string, repo: string, branch: strin
     return true;
   });
 
-  // Cache the filtered tree
-  await cacheFileTree(owner, repo, sha, filteredTree);
+  // Create a minimal tree for caching/usage to save space
+  // We strip 'url' (large string) and 'mode' (unused)
+  const minimalTree = filteredTree.map(node => ({
+    path: node.path,
+    type: node.type,
+    sha: node.sha,
+    size: node.size
+  }));
 
-  return { tree: filteredTree, hiddenFiles };
+  // Cache the minimal tree
+  await cacheFileTree(owner, repo, sha, minimalTree);
+
+  return { tree: minimalTree, hiddenFiles };
 }
-
-/**
- * GraphQL query for repository details
- */
-const REPO_DETAILS_QUERY = `
-  query RepoDetails($owner: String!, $name: String!) {
-    repository(owner: $owner, name: $name) {
-      languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
-        totalSize
-        edges {
-          size
-          node {
-            name
-            color
-          }
-        }
-      }
-      defaultBranchRef {
-        target {
-          ... on Commit {
-            history(first: 20) {
-              edges {
-                node {
-                  message
-                  committedDate
-                  author {
-                    name
-                    avatarUrl
-                    user {
-                      login
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`;
 
 /**
  * Fetch enhanced repository details using GraphQL
@@ -275,6 +314,50 @@ export async function getRepoDetailsGraphQL(owner: string, repo: string) {
     return null;
   }
 }
+
+/**
+ * Core Repo Context Fetcher (hit by unstable_cache)
+ */
+async function getRepoFullContextRaw(owner: string, repo: string) {
+  // Check Mega-Key cache first
+  const cached = await getCachedRepoFullContext(owner, repo);
+  if (cached) {
+    // Put into memory caches for efficiency if needed
+    repoCache.set(`${owner}/${repo}`, cached.metadata);
+    return cached;
+  }
+
+  // Fetch all in parallel
+  const [metadata, details, readme] = await Promise.all([
+    getRepo(owner, repo),
+    getRepoDetailsGraphQL(owner, repo),
+    getRepoReadme(owner, repo)
+  ]);
+
+  const context = {
+    metadata,
+    languages: details?.languages || [],
+    commits: details?.commits || [],
+    readme
+  };
+
+  // Cache as Mega-Key
+  await cacheRepoFullContext(owner, repo, context);
+
+  return context;
+}
+
+/**
+ * EDGE-CACHE: Get Full Repo Context with Edge Performance
+ */
+export const getRepoFullContext = unstable_cache(
+  async (owner: string, repo: string) => getRepoFullContextRaw(owner, repo),
+  ['github-repo-full'],
+  {
+    revalidate: 900, // 15 minutes
+    tags: ['repo-full']
+  }
+);
 
 export async function getFileContent(
   owner: string,
@@ -434,6 +517,7 @@ export async function getReposReadmes(username: string) {
           description: repo.description,
           stars: repo.stargazers_count,
           forks: repo.forks_count,
+          language: repo.language,
         };
       } catch (e) {
         return null;
@@ -448,6 +532,7 @@ export async function getReposReadmes(username: string) {
       description: string | null;
       stars: number;
       forks: number;
+      language: string | null;
     }[];
   } catch (error) {
     console.error("Error fetching repos:", error);

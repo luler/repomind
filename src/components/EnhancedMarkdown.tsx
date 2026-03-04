@@ -1,5 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import { RepoCard } from "./RepoCard";
 import { DeveloperCard } from "./DeveloperCard";
 import { SmartLink } from "./SmartLink";
@@ -70,6 +72,7 @@ export function EnhancedMarkdown({ content, components }: EnhancedMarkdownProps)
                                 ...components
                             }}
                             remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeRaw, rehypeSanitize]}
                         >
                             {part.content as string}
                         </ReactMarkdown>
